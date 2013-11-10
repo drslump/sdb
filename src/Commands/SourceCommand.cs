@@ -20,6 +20,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace Mono.Debugger.Client.Commands
 {
@@ -121,10 +122,7 @@ namespace Mono.Debugger.Client.Commands
 
                         if (i > 0 && i < lower + 2 || j >= 0 && j < upper)
                         {
-                            if (cur == line - 1)
-                                Log.Emphasis(str);
-                            else
-                                Log.Info(str);
+                            PrintLine(cur + 1, str, cur == line - 1);
                         }
 
                         cur++;
@@ -137,6 +135,74 @@ namespace Mono.Debugger.Client.Commands
             }
             else
                 Log.Error("No source information available");
+        }
+
+        // List of keywords to highlight
+        static private HashSet<string> Keywords = new HashSet<string>() {
+            // C#
+            "class", "struct", "interface", "using", "if", "else", "for",
+            "while", "try", "catch", "finally", "new", "as", "is", "ref", 
+            "out", "private", "protected", "public", "internal", "virtual", 
+            "override",
+            // Boo
+            "def", "import", "from", "elif", "unless", "except", "ensure", 
+            "macro", "isa", "yield", "do", "callable", "and", "or", "not",
+            "in"
+        };
+        
+        // List of constants to highlight
+        static private HashSet<string> Constants = new HashSet<string>() {
+            // C#
+            "true", "false", "null",
+            "int", "uint", "double", "bool", "string", "object",
+            // Boo
+            "print", "property"
+        };
+
+        // Styles order must match the capturing groups in the regex
+        static private string LexerRegex = "\\b([A-Za-z_]+[A-Za-z0-9_]*)\\b|\\b(\\d+(?:\\.\\d+)?)\\b|('[^']*')|(\"[^\"]*\")|(#.*|//.*)|([=\\+\\*/~<>\\?^|-]+)|(.)";
+        static private ConsoleColor[] Styles = new ConsoleColor[] {
+            ConsoleColor.White,    // idents
+            ConsoleColor.Magenta,  // numbers
+            ConsoleColor.Yellow,   // single quoted
+            ConsoleColor.Yellow,   // double quoted
+            ConsoleColor.DarkCyan, // comments
+            ConsoleColor.Red,      // operators
+            ConsoleColor.Cyan      // anything else
+        };
+
+        private void PrintLine(int ln, string code, bool selected)
+        {
+            Console.ForegroundColor = selected ? ConsoleColor.Yellow : ConsoleColor.Gray;
+
+            if (selected)
+                Console.Write(" -->");
+            else
+                Console.Write("{0,3} ", ln);
+
+            // Simple regex based highlighting
+            foreach (Match match in Regex.Matches(code, LexerRegex))
+            {
+                for (int i = 1; i < match.Groups.Count; i++)
+                {
+                    Group grp = match.Groups[i];
+                    if (grp.Success)
+                    {
+                        if (Keywords.Contains(grp.Value))
+                            Console.ForegroundColor = ConsoleColor.DarkBlue;
+                        else if (Constants.Contains(grp.Value))
+                            Console.ForegroundColor = ConsoleColor.Green;
+                        else
+                            Console.ForegroundColor = Styles[i - 1];
+
+                        Console.Write(grp.Value);
+                        break;
+                    }
+                }
+            }
+
+            Console.ResetColor();
+            Console.WriteLine();
         }
     }
 }
